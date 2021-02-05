@@ -4,6 +4,7 @@ ARG RUNNER_BASE_IMAGE=alpine
 ARG RUNNER_BASE_TAG=latest
 ARG TARGET_OS=linux
 ARG TARGET_ARCH=amd64
+ARG ENABLE_TESTS=1
 ARG ENABLE_UPX=0
 
 ### Builder ###
@@ -13,6 +14,7 @@ ARG RUNNER_BASE_IMAGE
 ARG RUNNER_BASE_TAG
 ARG TARGET_OS
 ARG TARGET_ARCH
+ARG ENABLE_TESTS
 ARG ENABLE_UPX
 
 ENV CGO_ENABLED=0
@@ -40,7 +42,7 @@ RUN apk update \
 
 RUN go get -d \
     && go build -o /home/build/server -ldflags="-s -w" \
-    && go test -v ./... \
+    && if [ "${ENABLE_TESTS}" = '1' ] || [ "${ENABLE_TESTS}" = 'true' ]; then go test -v ./... ; fi \
     && if [ "${ENABLE_UPX}" = '1' ] || [ "${ENABLE_UPX}" = 'true' ]; then upx --lzma -q /home/build/server; fi
 
 ### Runner ###
