@@ -1,0 +1,3 @@
+ignored:
+  - DL3003 # use WORKDIR to switch to a directory
+  - DL3018 # pin version in apk add
