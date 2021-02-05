@@ -1,0 +1,204 @@
+name: client
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - 'v*.*.*'
+  pull_request:
+
+env:
+  DOCKER_HUB_IMAGE_PREFIX: greenvine
+  DOCKER_IMAGE_NAME: hey-grpc-client
+
+jobs:
+  lint_dockerfile:
+    name: Lint Dockerfile
+    runs-on: ubuntu-20.04
+    steps:
+      - id: checkout_repo
+        name: Checkout repository
+        uses: actions/checkout@v2
+
+      - id: lint_dockerfile
+        name: Lint Dockerfile
+        uses: brpaz/hadolint-action@v1.3.1
+        with:
+          dockerfile: Dockerfile
+
+  test_go:
+    name: Lint & Test Go
+    runs-on: ubuntu-20.04
+    steps:
+      - id: checkout_repo
+        name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+
+      - id: lint_go_src
+        name: Lint Golang source
+        run: make lint
+
+      - id: setup_go_env
+        name: Setup Golang environment
+        uses: actions/setup-go@v2
+        with:
+          go-version: '^1.15'
+
+      - id: build_binary
+        name: Build binary
+        run: make build
+
+      - id: run_tests
+        name: Run tests
+        run: make test
+
+  pre_release:
+    name: Prepare Release
+    runs-on: ubuntu-20.04
+    if: ${{ github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/v') }}
+    outputs:
+      tagmsg: ${{ steps.get_tag_message.outputs.message }}
+    steps:
+      - id: checkout_repo
+        name: Checkout repository
+        uses: actions/checkout@v2
+
+      - id: get_tag_message
+        name: Get tag message
+        run: |
+          git fetch --tags --force
+
+          TAG_NAME=${GITHUB_REF/refs\/tags\//}
+
+          TAG_MESSAGE=$(git tag -l --format='%(contents)' "${TAG_NAME}")
+          TAG_MESSAGE="${TAG_MESSAGE//'%'/'%25'}"
+          TAG_MESSAGE="${TAG_MESSAGE//$'\n'/'%0A'}"
+          TAG_MESSAGE="${TAG_MESSAGE//$'\r'/'%0D'}"
+
+          echo ::set-output name=message::"${TAG_MESSAGE}"
+
+  release_binary:
+    name: Release Binary
+    runs-on: ubuntu-20.04
+    needs:
+      - lint_dockerfile
+      - test_go
+      - pre_release
+    env:
+      ASSET_NAME_PREFIX: hey-grpc-client-
+    if: ${{ github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/v') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: darwin
+            platform: amd64
+          - os: linux
+            platform: '386'
+          - os: linux
+            platform: amd64
+          - os: linux
+            platform: arm
+          - os: linux
+            platform: arm64
+          - os: linux
+            platform: mips
+          - os: linux
+            platform: mips64
+          - os: linux
+            platform: mipsle
+          - os: windows
+            platform: '386'
+            extension: .exe
+          - os: windows
+            platform: amd64
+            extension: .exe
+          - os: windows
+            platform: arm
+            extension: .exe
+    steps:
+      - id: checkout_repo
+        name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+
+      - id: setup_go_env
+        name: Setup Golang environment
+        uses: actions/setup-go@v2
+        with:
+          go-version: '^1.15'
+
+      - id: build_binary
+        name: Build binary
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.platform }}
+        run: make build
+
+      - id: upload_binary
+        name: Upload binary
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: build/client
+          tag: ${{ github.ref }}
+          overwrite: true
+          asset_name: ${{ env.ASSET_NAME_PREFIX }}${{ matrix.os }}-${{ matrix.platform }}${{ matrix.extension }}
+          body: ${{ needs.pre_release.outputs.tagmsg }}
+
+  build_docker:
+    name: Build & Push Images
+    runs-on: ubuntu-20.04
+    needs:
+      - lint_dockerfile
+      - test_go
+    if: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - id: checkout_repo
+        name: Checkout repository
+        uses: actions/checkout@v2
+
+      - id: setup_qemu
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
+      - id: setup_docker_buildx
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - id: get_commit_short_sha
+        name: Get commit short SHA
+        run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+
+      - id: login_docker_hub
+        name: Login to Docker Hub
+        uses: docker/login-action@v1
+        if: github.event_name != 'pull_request'
+        with:
+          username: ${{ secrets.DOCKER_HUB_USER }}
+          password: ${{ secrets.DOCKER_HUB_PASS }}
+
+      - id: gen_meta_for_docker_hub
+        name: Generate image meta for Docker Hub
+        uses: crazy-max/ghaction-docker-meta@v1
+        with:
+          images: ${{ env.DOCKER_HUB_IMAGE_PREFIX }}/${{ env.DOCKER_IMAGE_NAME }}
+          tag-custom: commit-${{ steps.get_commit_short_sha.outputs.sha_short }}
+          tag-sha: false
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: build_push_to_docker_hub
+        name: Build & push to Docker Hub
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/386,linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          build-args: ENABLE_UPX=false
+          tags: ${{ steps.gen_meta_for_docker_hub.outputs.tags }}
+          labels: ${{ steps.gen_meta_for_docker_hub.outputs.labels }}
