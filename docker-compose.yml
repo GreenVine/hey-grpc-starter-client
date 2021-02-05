@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  client:
+    build:
+      context: .
+    image: hey-grpc-client:local-build
+    command: [ '-server', '0.0.0.0:3000' ]
+    volumes:
+      - ${PWD}:/home/app:ro
+      - ${GOPATH}/src:/go/src
