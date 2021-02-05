@@ -1,0 +1,34 @@
+version: 2
+updates:
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+    commit-message:
+      prefix: deps(actions)
+    labels:
+      - dependabot
+      - github-actions-deps
+
+  # Enable version updates for Docker
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps(docker)
+    labels:
+      - dependabot
+      - docker-deps
+
+  # Enable version updates for Go
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: daily
+    commit-message:
+      prefix: deps(go)
+    labels:
+      - dependabot
+      - golang-deps
