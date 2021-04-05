@@ -184,7 +184,7 @@ jobs:
 
       - id: gen_meta_for_docker_hub
         name: Generate image meta for Docker Hub
-        uses: crazy-max/ghaction-docker-meta@v1
+        uses: crazy-max/ghaction-docker-meta@v2.2.0
         with:
           images: ${{ env.DOCKER_HUB_IMAGE_PREFIX }}/${{ env.DOCKER_IMAGE_NAME }}
           tag-custom: commit-${{ steps.get_commit_short_sha.outputs.sha_short }}
