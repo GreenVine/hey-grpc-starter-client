@@ -168,7 +168,7 @@ jobs:
 
       - id: setup_docker_buildx
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v1.3.0
 
       - id: get_commit_short_sha
         name: Get commit short SHA
